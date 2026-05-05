@@ -1,5 +1,4 @@
-package com.example.plexus.ui.screens
-
+package com.example.plexus.ui.theme
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
