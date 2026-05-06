@@ -1,11 +1,14 @@
-package com.example.plexus.ui.theme
+package com.example.plexus.ui.screens
+
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,7 +28,11 @@ fun ProfileScreen(
     userName: String = "Varun",
     phoneNumber: String = "+91 XXXXX XXXXX",
     onBack: () -> Unit = {},
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onLocalNetworkClick: () -> Unit = {},  // ← ADD
+    onInternetModeClick: () -> Unit = {},  // ← ADD
+    onEditProfileClick: () -> Unit = {},   // ← ADD
+    onNotificationsClick: () -> Unit = {}  // ← ADD
 ) {
     val contentAlpha = remember { Animatable(0f) }
     val contentOffsetY = remember { Animatable(30f) }
@@ -36,10 +43,10 @@ fun ProfileScreen(
     }
 
     PlexusBackground {
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .alpha(contentAlpha.value)
                 .offset(y = contentOffsetY.value.dp)
         ) {
@@ -48,6 +55,7 @@ fun ProfileScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -102,19 +110,19 @@ fun ProfileScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = userName.first().uppercase(),
+                            text = userName.firstOrNull()?.uppercase() ?: "?",
                             fontSize = 42.sp,
                             fontWeight = FontWeight.Bold,
                             color = PlexusColors.BgDark
                         )
                     }
-                    // Edit badge
                     Box(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
                             .background(PlexusColors.CardBg)
-                            .border(1.dp, PlexusColors.CyanPrimary.copy(alpha = 0.4f), CircleShape),
+                            .border(1.dp, PlexusColors.CyanPrimary.copy(alpha = 0.4f), CircleShape)
+                            .clickable { onEditProfileClick() },
                         contentAlignment = Alignment.Center
                     ) {
                         Text("✎", fontSize = 12.sp, color = PlexusColors.CyanPrimary)
@@ -139,7 +147,6 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Connection badges
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PlexusStatusBadge(label = "Local", dotColor = PlexusColors.CyanGreen)
                     PlexusStatusBadge(label = "Internet", dotColor = PlexusColors.CyanPrimary)
@@ -154,13 +161,33 @@ fun ProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 ProfileSectionLabel("ACCOUNT")
-                ProfileItem(icon = "👤", title = "Edit Profile", subtitle = "Name, avatar")
-                ProfileItem(icon = "🔔", title = "Notifications", subtitle = "Sounds, alerts")
+                ProfileItem(
+                    icon = "👤",
+                    title = "Edit Profile",
+                    subtitle = "Name, avatar",
+                    onClick = onEditProfileClick
+                )
+                ProfileItem(
+                    icon = "🔔",
+                    title = "Notifications",
+                    subtitle = "Sounds, alerts",
+                    onClick = onNotificationsClick
+                )
 
                 Spacer(modifier = Modifier.height(4.dp))
                 ProfileSectionLabel("NETWORK")
-                ProfileItem(icon = "📡", title = "Local Network", subtitle = "Discover nearby devices")
-                ProfileItem(icon = "🌐", title = "Internet Mode", subtitle = "Connect via server")
+                ProfileItem(
+                    icon = "📡",
+                    title = "Local Network",
+                    subtitle = "Discover nearby devices",
+                    onClick = onLocalNetworkClick  // ← clean callback, no navController here
+                )
+                ProfileItem(
+                    icon = "🌐",
+                    title = "Internet Mode",
+                    subtitle = "Connect via server",
+                    onClick = onInternetModeClick
+                )
 
                 Spacer(modifier = Modifier.height(4.dp))
                 ProfileSectionLabel("APP")
@@ -189,6 +216,8 @@ fun ProfileScreen(
                         letterSpacing = 0.5.sp
                     )
                 }
+
+                Spacer(modifier = Modifier.navigationBarsPadding())
             }
         }
     }
@@ -210,7 +239,8 @@ private fun ProfileSectionLabel(label: String) {
 private fun ProfileItem(
     icon: String,
     title: String,
-    subtitle: String
+    subtitle: String,
+    onClick: () -> Unit = {}  // ← ADD default empty lambda
 ) {
     Row(
         modifier = Modifier
@@ -218,7 +248,7 @@ private fun ProfileItem(
             .clip(RoundedCornerShape(14.dp))
             .background(PlexusColors.CardBg)
             .border(1.dp, PlexusColors.PurplePrimary.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
-            .clickable { }
+            .clickable { onClick() }  // ← now uses the parameter
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)

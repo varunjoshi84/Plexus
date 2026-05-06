@@ -63,6 +63,7 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .background(PlexusColors.CardBg.copy(alpha = 0.9f))
                     .border(
                         width = 1.dp,

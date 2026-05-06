@@ -23,7 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
+import androidx.compose.foundation.layout.safeDrawingPadding
 // ─── Colors ───────────────────────────────────────────
 object PlexusColors {
     val BgDark        = Color(0xFF080818)
@@ -75,6 +75,7 @@ fun PlexusBackground(
         modifier = modifier
             .fillMaxSize()
             .background(PlexusColors.BgDark)
+            .safeDrawingPadding() // ← ADD THIS — fixes all screens at once
     ) {
         PlexusGrid()
         PlexusAmbientGlow()

@@ -1,4 +1,4 @@
-package com.example.plexus.ui.theme
+package com.example.plexus.ui.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,6 +61,7 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 16.dp)
                     .alpha(titleAlpha.value),
                 verticalAlignment = Alignment.CenterVertically,

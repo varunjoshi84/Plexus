@@ -1,49 +1,84 @@
 package com.example.plexus.navigation
 
-import androidx.compose.runtime.Composable
+import android.app.Activity
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.plexus.ui.screens.ChatScreen
-import com.example.plexus.ui.theme.HomeScreen
-import com.example.plexus.ui.theme.LoginScreen
-import com.example.plexus.ui.theme.OtpScreen
-import com.example.plexus.ui.theme.ProfileScreen
-import com.example.plexus.ui.theme.SplashScreen
+import com.example.plexus.ui.screens.*
+import com.example.plexus.viewmodel.AuthState
+import com.example.plexus.viewmodel.AuthViewModel
+import com.example.plexus.viewmodel.ChatViewModel
+import com.example.plexus.viewmodel.LocalChatViewModel
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
-// ─── Routes ───────────────────────────────────────────
 object Routes {
-    const val SPLASH   = "splash"
-    const val LOGIN    = "login"
-    const val OTP      = "otp/{phoneNumber}"
-    const val HOME     = "home"
-    const val CHAT     = "chat/{contactId}/{contactName}"
-    const val PROFILE  = "profile"
+    const val SPLASH        = "splash"
+    const val LOGIN         = "login"
+    const val OTP           = "otp/{phoneNumber}"
+    const val HOME          = "home"
+    const val CHAT          = "chat/{contactId}/{contactName}"
+    const val PROFILE       = "profile"
+    const val LOCAL_DEVICES = "local_devices"
+    const val NEW_CHAT = "new_chat"
 
-    // Helper functions to build routes with arguments
-    fun otp(phoneNumber: String)                       = "otp/$phoneNumber"
-    fun chat(contactId: String, contactName: String)   = "chat/$contactId/$contactName"
+    fun otp(phoneNumber: String)                     = "otp/$phoneNumber"
+    fun chat(contactId: String, contactName: String) = "chat/$contactId/$contactName"
 }
 
-// ─── NavGraph ─────────────────────────────────────────
 @Composable
 fun PlexusNavGraph(
     navController: NavHostController = rememberNavController()
 ) {
+    // declare all ViewModels once at the top
+    val authViewModel: AuthViewModel = viewModel()
+    val chatViewModel: ChatViewModel = viewModel()
+    val context = LocalContext.current
+
     NavHost(
         navController = navController,
-        startDestination = Routes.SPLASH
+        startDestination = if (authViewModel.isLoggedIn) Routes.HOME else Routes.SPLASH,
+        enterTransition = {
+            slideIntoContainer(
+                AnimatedContentTransitionScope.SlideDirection.Left,
+                tween(300)
+            ) + fadeIn(tween(300))
+        },
+        exitTransition = {
+            slideOutOfContainer(
+                AnimatedContentTransitionScope.SlideDirection.Left,
+                tween(300)
+            ) + fadeOut(tween(300))
+        },
+        popEnterTransition = {
+            slideIntoContainer(
+                AnimatedContentTransitionScope.SlideDirection.Right,
+                tween(300)
+            ) + fadeIn(tween(300))
+        },
+        popExitTransition = {
+            slideOutOfContainer(
+                AnimatedContentTransitionScope.SlideDirection.Right,
+                tween(300)
+            ) + fadeOut(tween(300))
+        }
     ) {
 
         // Splash
         composable(Routes.SPLASH) {
             SplashScreen(
                 onSplashComplete = {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.SPLASH) { inclusive = true } // remove splash from backstack
+                    val dest = if (authViewModel.isLoggedIn) Routes.HOME else Routes.LOGIN
+                    navController.navigate(dest) {
+                        popUpTo(Routes.SPLASH) { inclusive = true }
                     }
                 }
             )
@@ -53,12 +88,13 @@ fun PlexusNavGraph(
         composable(Routes.LOGIN) {
             LoginScreen(
                 onContinue = { phoneNumber ->
+                    authViewModel.sendOtp(phoneNumber, context as Activity)
                     navController.navigate(Routes.otp(phoneNumber))
                 }
             )
         }
 
-        // OTP — receives phoneNumber from login
+        // OTP
         composable(
             route = Routes.OTP,
             arguments = listOf(
@@ -66,26 +102,49 @@ fun PlexusNavGraph(
             )
         ) { backStackEntry ->
             val phoneNumber = backStackEntry.arguments?.getString("phoneNumber") ?: ""
+            val authState by authViewModel.authState.collectAsState()
+
+            LaunchedEffect(authState) {
+                if (authState is AuthState.Verified) {
+                    chatViewModel.saveUser(phoneNumber)
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                    }
+                    authViewModel.resetState()
+                }
+            }
+
             OtpScreen(
                 phoneNumber = phoneNumber,
-                onVerified = {
-                    navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.LOGIN) { inclusive = true } // clear login + otp from backstack
-                    }
+                onVerified = { otpCode ->
+                    authViewModel.verifyOtp(otpCode)
                 },
                 onResend = {
-                    // call your ViewModel resend function here
+                    authViewModel.sendOtp(phoneNumber, context as Activity)
                 },
-                onBack = {
-                    navController.popBackStack()
-                }
+                onBack = { navController.popBackStack() }
             )
         }
 
         // Home
         composable(Routes.HOME) {
+            val chats by chatViewModel.chats.collectAsState()
+
+            LaunchedEffect(Unit) {
+                chatViewModel.listenToChats()
+            }
+
             HomeScreen(
-                chats = emptyList(), // pass real list from ViewModel here
+                chats = chats.map { chat ->
+                    ChatPreviewUiModel(
+                        id = chat.chatId,
+                        name = chat.chatId,
+                        lastMessage = chat.lastMessage,
+                        time = "",
+                        isOnline = false,
+                        isLocal = false
+                    )
+                },
                 onChatClick = { contactId ->
                     navController.navigate(Routes.chat(contactId, "Contact"))
                 },
@@ -93,12 +152,12 @@ fun PlexusNavGraph(
                     navController.navigate(Routes.PROFILE)
                 },
                 onNewChat = {
-                    // open new chat dialog or screen
+                    navController.navigate(Routes.NEW_CHAT)
                 }
             )
         }
 
-        // Chat — receives contactId and contactName
+        // Chat
         composable(
             route = Routes.CHAT,
             arguments = listOf(
@@ -106,36 +165,105 @@ fun PlexusNavGraph(
                 navArgument("contactName") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val contactId   = backStackEntry.arguments?.getString("contactId") ?: ""
+            val chatId      = backStackEntry.arguments?.getString("contactId") ?: ""
             val contactName = backStackEntry.arguments?.getString("contactName") ?: ""
+            val messages by chatViewModel.messages.collectAsState()
+
+            LaunchedEffect(chatId) {
+                chatViewModel.listenToMessages(chatId)
+            }
+
             ChatScreen(
                 contactName = contactName,
-                isOnline = false,      // pass from ViewModel
-                isLocal = false,       // pass from ViewModel
-                messages = emptyList(), // pass from ViewModel
-                onSendMessage = { text ->
-                    // call ViewModel sendMessage(text) here
+                isOnline = false,
+                isLocal = false,
+                messages = messages.map { msg ->
+                    MessageUiModel(
+                        id = msg.id,
+                        text = msg.text,
+                        isMine = msg.senderId == chatViewModel.currentUserId,
+                        time = "",
+                        status = MessageStatus.SENT
+                    )
                 },
-                onBack = {
-                    navController.popBackStack()
-                }
+                onSendMessage = { text ->
+                    chatViewModel.sendMessage(chatId, text)
+                },
+                onBack = { navController.popBackStack() }
             )
         }
 
         // Profile
         composable(Routes.PROFILE) {
             ProfileScreen(
-                userName = "Varun",        // pass from ViewModel
-                phoneNumber = "+91 XXXXX XXXXX", // pass from ViewModel
-                onBack = {
-                    navController.popBackStack()
-                },
+                userName = authViewModel.currentUser?.displayName
+                    ?: authViewModel.currentUser?.phoneNumber
+                    ?: "User",
+                phoneNumber = authViewModel.currentUser?.phoneNumber ?: "",
+                onBack = { navController.popBackStack() },
                 onLogout = {
+                    authViewModel.logout()  // ✅ now accessible
                     navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.HOME) { inclusive = true }
+                        popUpTo(0) { inclusive = true } // clear entire backstack
                     }
+                },
+                onLocalNetworkClick = {
+                    navController.navigate(Routes.LOCAL_DEVICES)
+                },
+                onInternetModeClick = { },
+                onEditProfileClick = { },
+                onNotificationsClick = { }
+            )
+        }
+
+        // Local Devices
+        composable(Routes.LOCAL_DEVICES) {
+            val localViewModel: LocalChatViewModel = viewModel()
+            val devices by localViewModel.discoveredDevices.collectAsState()
+            val connectionState by localViewModel.connectionState.collectAsState()
+
+            LaunchedEffect(Unit) {
+                val name = authViewModel.currentUser?.displayName
+                    ?: authViewModel.currentUser?.phoneNumber
+                    ?: "User"
+                localViewModel.initialize(context, name)
+            }
+            LocalDevicesScreen(
+                discoveredDevices = devices,
+                connectionState = connectionState,
+                onDeviceClick = { device ->
+                    localViewModel.connectToDevice(device)
+                    navController.navigate(Routes.HOME)
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.NEW_CHAT) {
+            val searchResults by chatViewModel.searchResults.collectAsState()
+            val isSearching by chatViewModel.isSearching.collectAsState()
+            val searchError by chatViewModel.searchError.collectAsState()
+
+            NewChatScreen(
+                searchResults = searchResults,
+                isSearching = isSearching,
+                errorMessage = searchError,
+                onSearch = { phone ->
+                    chatViewModel.searchUserByPhone(phone)
+                },
+                onUserClick = { user ->
+                    chatViewModel.createChat(user.uid) { chatId ->
+                        navController.navigate(Routes.chat(chatId, user.name.ifEmpty { user.phone })) {
+                            popUpTo(Routes.NEW_CHAT) { inclusive = true }
+                        }
+                    }
+                },
+                onBack = {
+                    chatViewModel.clearSearch()
+                    navController.popBackStack()
                 }
             )
         }
     }
+
 }

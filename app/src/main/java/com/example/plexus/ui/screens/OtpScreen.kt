@@ -1,14 +1,11 @@
-package com.example.plexus.ui.theme
-import kotlinx.coroutines.launch
-
-
-
+package com.example.plexus.ui.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,7 +15,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,11 +25,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.plexus.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun OtpScreen(
     phoneNumber: String = "",
-    onVerified: () -> Unit = {},
+    onVerified: (String) -> Unit = {},  // ← now passes OTP code
     onResend: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
@@ -41,21 +41,17 @@ fun OtpScreen(
     val cardOffsetY = remember { Animatable(40f) }
     val titleAlpha = remember { Animatable(0f) }
 
-    // Resend timer countdown (60s) — UI only, no real timer logic
     var timerValue by remember { mutableStateOf(60) }
     var canResend by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        launch {
-            titleAlpha.animateTo(1f, tween(600))
-        }
+        launch { titleAlpha.animateTo(1f, tween(600)) }
         launch {
             kotlinx.coroutines.delay(200)
             cardAlpha.animateTo(1f, tween(700))
             cardOffsetY.animateTo(0f, tween(700, easing = EaseOut))
             focusRequesters[0].requestFocus()
         }
-        // Countdown timer UI
         launch {
             while (timerValue > 0) {
                 kotlinx.coroutines.delay(1000)
@@ -67,7 +63,9 @@ fun OtpScreen(
 
     PlexusBackground {
         PlexusRippleRings(
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = 60.dp),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = 60.dp),
             ringCount = 3,
             ringSize = 200
         )
@@ -80,11 +78,7 @@ fun OtpScreen(
                 .padding(16.dp)
                 .alpha(titleAlpha.value)
         ) {
-            Text(
-                text = "←",
-                fontSize = 24.sp,
-                color = PlexusColors.CyanPrimary
-            )
+            Text("←", fontSize = 24.sp, color = PlexusColors.CyanPrimary)
         }
 
         Column(
@@ -149,7 +143,7 @@ fun OtpScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
 
-                    // Field label
+                    // Label
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -169,7 +163,7 @@ fun OtpScreen(
                         )
                     }
 
-                    // OTP Boxes
+                    // OTP boxes
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -179,14 +173,18 @@ fun OtpScreen(
                                 value = value,
                                 focusRequester = focusRequesters[index],
                                 onValueChange = { newVal ->
-                                    if (newVal.length <= 1 && newVal.all { it.isDigit() }) {
-                                        otpValues[index] = newVal
-                                        if (newVal.isNotEmpty() && index < 5) {
-                                            focusRequesters[index + 1].requestFocus()
+                                    val digit = newVal.filter { it.isDigit() }
+                                    when {
+                                        // typed a digit
+                                        digit.isNotEmpty() -> {
+                                            otpValues[index] = digit.last().toString()
+                                            if (index < 5) focusRequesters[index + 1].requestFocus()
                                         }
-                                    } else if (newVal.isEmpty()) {
-                                        otpValues[index] = ""
-                                        if (index > 0) focusRequesters[index - 1].requestFocus()
+                                        // deleted
+                                        newVal.isEmpty() -> {
+                                            otpValues[index] = ""
+                                            if (index > 0) focusRequesters[index - 1].requestFocus()
+                                        }
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
@@ -194,12 +192,14 @@ fun OtpScreen(
                         }
                     }
 
-                    // Verify Button
+                    // Verify button
                     val isComplete = otpValues.all { it.isNotEmpty() }
                     Button(
-                        onClick = onVerified,
+                        onClick = { onVerified(otpValues.joinToString("")) }, // ← passes full OTP
                         enabled = isComplete,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent,
@@ -275,27 +275,42 @@ private fun OtpBox(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    OutlinedTextField(
+    var isFocused by remember { mutableStateOf(false) }
+
+    BasicTextField(                          // ← key fix: BasicTextField not OutlinedTextField
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
         textStyle = TextStyle(
-            color = PlexusColors.TextWhite,
+            color = PlexusColors.TextWhite,  // ← always visible white
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         ),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = PlexusColors.CyanPrimary,
-            unfocusedBorderColor = PlexusColors.PurplePrimary.copy(alpha = 0.3f),
-            cursorColor = PlexusColors.CyanLight,
-            focusedContainerColor = PlexusColors.CyanPrimary.copy(alpha = 0.08f),
-            unfocusedContainerColor = PlexusColors.CardBg
-        ),
-        shape = RoundedCornerShape(12.dp),
+        cursorBrush = SolidColor(PlexusColors.CyanLight),
+        decorationBox = { innerTextField ->
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (isFocused) PlexusColors.CyanPrimary.copy(alpha = 0.1f)
+                        else PlexusColors.BgDark
+                    )
+                    .border(
+                        width = if (isFocused) 2.dp else 1.dp,
+                        color = if (isFocused) PlexusColors.CyanPrimary
+                        else PlexusColors.PurplePrimary.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                innerTextField()
+            }
+        },
         modifier = modifier
-            .height(56.dp)
             .focusRequester(focusRequester)
+            .onFocusChanged { isFocused = it.isFocused }
     )
 }
