@@ -1,5 +1,6 @@
 package com.example.plexus.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.plexus.data.model.ChatModel
@@ -200,11 +201,24 @@ class ChatViewModel : ViewModel() {
         com.google.firebase.messaging.FirebaseMessaging
             .getInstance().token
             .addOnSuccessListener { token ->
+                Log.d("PlexusFCM", "FCM Token: $token")
                 val uid = currentUserId
-                if (uid.isEmpty()) return@addOnSuccessListener
+                if (uid.isEmpty()) {
+                    Log.w("PlexusFCM", "No UID found, cannot save token")
+                    return@addOnSuccessListener
+                }
                 db.collection("users")
                     .document(uid)
                     .update("fcmToken", token)
+                    .addOnSuccessListener {
+                        Log.d("PlexusFCM", "Token updated successfully in Firestore")
+                    }
+                    .addOnFailureListener {
+                        Log.e("PlexusFCM", "Failed to update token in Firestore", it)
+                    }
+            }
+            .addOnFailureListener {
+                Log.e("PlexusFCM", "Failed to get FCM Token", it)
             }
     }
 }

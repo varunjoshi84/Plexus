@@ -27,6 +27,11 @@ import com.example.plexus.data.model.UserModel
 import com.example.plexus.utils.TimeUtils
 import kotlinx.coroutines.tasks.await
 import com.example.plexus.ui.theme.PlexusColors
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.os.Build
+import android.widget.Toast
 
 object Routes {
     const val SPLASH        = "splash"
@@ -150,7 +155,7 @@ fun PlexusNavGraph(
         // Complete Profile
         composable(Routes.COMPLETE_PROFILE) {
             val authState by authViewModel.authState.collectAsState()
-            
+
             CompleteProfileScreen(
                 onComplete = { username, displayName, bio ->
                     authViewModel.saveUserProfile(username, displayName, bio)
@@ -173,6 +178,11 @@ fun PlexusNavGraph(
         // Home
         composable(Routes.HOME) {
             val chats by chatViewModel.chats.collectAsState()
+
+            LaunchedEffect(Unit) {
+                chatViewModel.saveFcmToken()
+            }
+
             val profiles by chatViewModel.participantProfiles.collectAsState()
 
             LaunchedEffect(Unit) {
@@ -250,6 +260,16 @@ fun PlexusNavGraph(
 
         // Profile
         composable(Routes.PROFILE) {
+            val permissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { isGranted ->
+                if (isGranted) {
+                    Toast.makeText(context, "Notifications enabled", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Permission denied", Toast.LENGTH_SHORT).show()
+                }
+            }
+
             ProfileScreen(
                 userName = authViewModel.currentUser?.displayName
                     ?: authViewModel.currentUser?.phoneNumber
@@ -265,18 +285,26 @@ fun PlexusNavGraph(
                 onLocalNetworkClick = {
                     navController.navigate(Routes.LOCAL_DEVICES)
                 },
-                onInternetModeClick = { },
-                onEditProfileClick = { 
+                onInternetModeClick = {
+                    navController.navigate(Routes.NEW_CHAT)
+                },
+                onEditProfileClick = {
                     navController.navigate(Routes.EDIT_PROFILE)
                 },
-                onNotificationsClick = { }
+                onNotificationsClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        Toast.makeText(context, "Notifications are already enabled", Toast.LENGTH_SHORT).show()
+                    }
+                }
             )
         }
 
         // Edit Profile
         composable(Routes.EDIT_PROFILE) {
             val authState by authViewModel.authState.collectAsState()
-            
+
             var userProfile by remember { mutableStateOf<UserModel?>(null) }
             val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
             val uid = authViewModel.currentUser?.uid ?: ""

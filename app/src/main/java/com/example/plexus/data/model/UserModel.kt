@@ -1,5 +1,7 @@
 package com.example.plexus.data.model
 
+import com.google.firebase.firestore.PropertyName
+
 data class UserModel(
     val uid: String = "",
     val username: String = "",
@@ -7,5 +9,7 @@ data class UserModel(
     val phone: String = "",
     val bio: String = "",
     val profileImageUrl: String = "",
-    val isOnline: Boolean = false
+    val fcmToken: String = "",
+    @get:PropertyName("online") @set:PropertyName("online")
+    var isOnline: Boolean = false
 )
