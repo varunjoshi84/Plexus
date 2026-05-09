@@ -19,15 +19,24 @@ import com.example.plexus.viewmodel.ChatViewModel
 import com.example.plexus.viewmodel.LocalChatViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import com.example.plexus.data.model.UserModel
 import com.example.plexus.utils.TimeUtils
+import kotlinx.coroutines.tasks.await
+import com.example.plexus.ui.theme.PlexusColors
 
 object Routes {
     const val SPLASH        = "splash"
     const val LOGIN         = "login"
     const val OTP           = "otp/{phoneNumber}"
     const val HOME          = "home"
+    const val COMPLETE_PROFILE = "complete_profile"
     const val CHAT          = "chat/{contactId}/{contactName}"
     const val PROFILE       = "profile"
+    const val EDIT_PROFILE  = "edit_profile"
     const val LOCAL_DEVICES = "local_devices"
     const val NEW_CHAT = "new_chat"
 
@@ -109,13 +118,20 @@ fun PlexusNavGraph(
             val authState by authViewModel.authState.collectAsState()
 
             LaunchedEffect(authState) {
-                if (authState is AuthState.Verified) {
-                    chatViewModel.saveUser(phoneNumber)
-                    chatViewModel.saveFcmToken()
-                    navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.LOGIN) { inclusive = true }
+                when (authState) {
+                    is AuthState.Verified -> {
+                        chatViewModel.saveFcmToken()
+                        navController.navigate(Routes.HOME) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                        authViewModel.resetState()
                     }
-                    authViewModel.resetState()
+                    is AuthState.NeedsProfile -> {
+                        navController.navigate(Routes.COMPLETE_PROFILE) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                    else -> {}
                 }
             }
 
@@ -131,9 +147,33 @@ fun PlexusNavGraph(
             )
         }
 
+        // Complete Profile
+        composable(Routes.COMPLETE_PROFILE) {
+            val authState by authViewModel.authState.collectAsState()
+            
+            CompleteProfileScreen(
+                onComplete = { username, displayName, bio ->
+                    authViewModel.saveUserProfile(username, displayName, bio)
+                },
+                errorMessage = (authState as? AuthState.Error)?.message,
+                isLoading = authState is AuthState.Loading
+            )
+
+            LaunchedEffect(authState) {
+                if (authState is AuthState.Verified) {
+                    chatViewModel.saveFcmToken()
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                    authViewModel.resetState()
+                }
+            }
+        }
+
         // Home
         composable(Routes.HOME) {
             val chats by chatViewModel.chats.collectAsState()
+            val profiles by chatViewModel.participantProfiles.collectAsState()
 
             LaunchedEffect(Unit) {
                 chatViewModel.listenToChats()
@@ -141,17 +181,27 @@ fun PlexusNavGraph(
 
             HomeScreen(
                 chats = chats.map { chat ->
+                    // Resolve the "other" participant's name
+                    val otherUid = chat.participants.firstOrNull { it != chatViewModel.currentUserId }
+                    val otherProfile = profiles[otherUid]
+                    val displayName = otherProfile?.displayName?.ifEmpty { otherProfile.username }
+                        ?: otherUid?.take(8) // Fallback to start of UID if profile not loaded
+                        ?: "Unknown"
+
                     ChatPreviewUiModel(
                         id = chat.chatId,
-                        name = chat.chatId,
+                        name = displayName,
                         lastMessage = chat.lastMessage,
                         time = TimeUtils.formatChatPreviewTime(chat.lastTime),
-                        isOnline = false,
+                        isOnline = otherProfile?.isOnline ?: false,
                         isLocal = false
                     )
                 },
                 onChatClick = { contactId ->
-                    navController.navigate(Routes.chat(contactId, "Contact"))
+                    // Navigate with current resolved name if possible
+                    val otherUid = chats.find { it.chatId == contactId }?.participants?.firstOrNull { it != chatViewModel.currentUserId }
+                    val name = profiles[otherUid]?.displayName?.ifEmpty { profiles[otherUid]?.username } ?: "Chat"
+                    navController.navigate(Routes.chat(contactId, name))
                 },
                 onProfileClick = {
                     navController.navigate(Routes.PROFILE)
@@ -216,9 +266,55 @@ fun PlexusNavGraph(
                     navController.navigate(Routes.LOCAL_DEVICES)
                 },
                 onInternetModeClick = { },
-                onEditProfileClick = { },
+                onEditProfileClick = { 
+                    navController.navigate(Routes.EDIT_PROFILE)
+                },
                 onNotificationsClick = { }
             )
+        }
+
+        // Edit Profile
+        composable(Routes.EDIT_PROFILE) {
+            val authState by authViewModel.authState.collectAsState()
+            
+            var userProfile by remember { mutableStateOf<UserModel?>(null) }
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val uid = authViewModel.currentUser?.uid ?: ""
+
+            LaunchedEffect(uid) {
+                if (uid.isNotEmpty()) {
+                    try {
+                        val doc = db.collection("users").document(uid).get().await()
+                        userProfile = doc.toObject(UserModel::class.java)
+                    } catch (e: Exception) {
+                        // handle error
+                    }
+                }
+            }
+
+            if (userProfile != null) {
+                EditProfileScreen(
+                    currentName = userProfile?.displayName ?: "",
+                    currentUsername = userProfile?.username ?: "",
+                    onUpdate = { username, displayName ->
+                        authViewModel.updateUserProfile(username, displayName)
+                    },
+                    onBack = { navController.popBackStack() },
+                    errorMessage = (authState as? AuthState.Error)?.message,
+                    isLoading = authState is AuthState.Loading
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = PlexusColors.CyanPrimary)
+                }
+            }
+
+            LaunchedEffect(authState) {
+                if (authState is AuthState.Verified) {
+                    navController.popBackStack()
+                    authViewModel.resetState()
+                }
+            }
         }
 
         // Local Devices
@@ -258,12 +354,12 @@ fun PlexusNavGraph(
                 searchResults = searchResults,
                 isSearching = isSearching,
                 errorMessage = searchError,
-                onSearch = { phone ->
-                    chatViewModel.searchUserByPhone(phone)
+                onSearch = { query ->
+                    chatViewModel.searchUserByUsername(query)
                 },
                 onUserClick = { user ->
                     chatViewModel.createChat(user.uid) { chatId ->
-                        navController.navigate(Routes.chat(chatId, user.name.ifEmpty { user.phone })) {
+                        navController.navigate(Routes.chat(chatId, user.displayName.ifEmpty { user.username })) {
                             popUpTo(Routes.NEW_CHAT) { inclusive = true }
                         }
                     }

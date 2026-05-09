@@ -5,5 +5,6 @@ sealed class AuthState {
     object Loading : AuthState()
     object CodeSent : AuthState()
     object Verified : AuthState()
+    object NeedsProfile : AuthState()
     data class Error(val message: String) : AuthState()
 }

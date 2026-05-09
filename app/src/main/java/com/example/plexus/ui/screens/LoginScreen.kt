@@ -142,16 +142,27 @@ fun LoginScreen(onContinue: (String) -> Unit = {}) {
                     // Input
                     OutlinedTextField(
                         value = phoneNumber,
-                        onValueChange = { if (it.length <= 15) phoneNumber = it },
+                        onValueChange = { input ->
+                            val digits = input.filter { it.isDigit() }
+                            if (digits.length <= 10) phoneNumber = digits
+                        },
+                        prefix = {
+                            Text(
+                                "+91 ",
+                                color = PlexusColors.CyanPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        },
                         placeholder = {
                             Text(
-                                "+91 XXXXX XXXXX",
+                                "XXXXX XXXXX",
                                 color = PlexusColors.TextWhite.copy(alpha = 0.2f),
                                 fontSize = 16.sp
                             )
                         },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         textStyle = TextStyle(
                             color = PlexusColors.TextWhite,
                             fontSize = 18.sp,
@@ -172,9 +183,9 @@ fun LoginScreen(onContinue: (String) -> Unit = {}) {
                     Spacer(modifier = Modifier.height(4.dp))
 
                     // Button
-                    val isEnabled = phoneNumber.length >= 10
+                    val isEnabled = phoneNumber.length == 10
                     Button(
-                        onClick = { onContinue(phoneNumber) },
+                        onClick = { onContinue("+91$phoneNumber") },
                         enabled = isEnabled,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(12.dp),

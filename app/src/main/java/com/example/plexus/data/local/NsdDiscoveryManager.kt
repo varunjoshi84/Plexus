@@ -31,11 +31,13 @@ class NsdDiscoveryManager(private val context: Context) {
 
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
+    private var myServiceName: String? = null
 
     // ─── Register this device on the network ──────────
     fun registerService(port: Int, deviceName: String) {
+        myServiceName = "$SERVICE_NAME-$deviceName"
         val serviceInfo = NsdServiceInfo().apply {
-            serviceName = "$SERVICE_NAME-$deviceName"
+            serviceName = myServiceName
             serviceType = SERVICE_TYPE
             setPort(port)
         }
@@ -81,6 +83,13 @@ class NsdDiscoveryManager(private val context: Context) {
             }
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "Service found: ${serviceInfo.serviceName}")
+                
+                // Don't discover ourselves
+                if (serviceInfo.serviceName == myServiceName) {
+                    Log.d(TAG, "Ignoring self")
+                    return
+                }
+
                 if (serviceInfo.serviceType == SERVICE_TYPE &&
                     serviceInfo.serviceName.contains(SERVICE_NAME)
                 ) {
@@ -121,8 +130,9 @@ class NsdDiscoveryManager(private val context: Context) {
 
                     val current = _discoveredDevices.value.toMutableList()
 
-                    //  deduplicate by host IP — prevents same device appearing multiple times
-                    if (current.none { it.host == device.host }) {
+                    // For emulators, multiple devices might share the same IP (10.0.2.2 or host machine IP)
+                    // but they will have different ports or names. Deduplicate by IP + Port.
+                    if (current.none { it.host == device.host && it.port == device.port }) {
                         current.add(device)
                         _discoveredDevices.value = current
                     }

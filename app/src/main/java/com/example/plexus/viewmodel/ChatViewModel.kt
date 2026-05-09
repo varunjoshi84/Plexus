@@ -38,13 +38,8 @@ class ChatViewModel : ViewModel() {
     private val _searchError = MutableStateFlow<String?>(null)
     val searchError: StateFlow<String?> = _searchError
 
-    // ─── Save user after login ─────────────────────────
-    fun saveUser(phone: String, name: String = "") {
-        val uid = currentUserId
-        if (uid.isEmpty()) return
-        val user = UserModel(uid = uid, name = name, phone = phone, isOnline = true)
-        db.collection("users").document(uid).set(user)
-    }
+    private val _participantProfiles = MutableStateFlow<Map<String, UserModel>>(emptyMap())
+    val participantProfiles: StateFlow<Map<String, UserModel>> = _participantProfiles
 
     // ─── Listen to chats ──────────────────────────────
     fun listenToChats() {
@@ -57,10 +52,37 @@ class ChatViewModel : ViewModel() {
                     _error.value = e.message
                     return@addSnapshotListener
                 }
-                _chats.value = snapshot?.documents?.mapNotNull {
+                val chatsList = snapshot?.documents?.mapNotNull {
                     it.toObject(ChatModel::class.java)
                 } ?: emptyList()
+                
+                _chats.value = chatsList
+                
+                // Fetch profiles for all participants we don't have yet
+                val allParticipantIds = chatsList.flatMap { it.participants }.distinct()
+                fetchMissingProfiles(allParticipantIds)
             }
+    }
+
+    private fun fetchMissingProfiles(ids: List<String>) {
+        val current = _participantProfiles.value
+        val missing = ids.filter { it !in current && it.isNotEmpty() }
+        if (missing.isEmpty()) return
+
+        viewModelScope.launch {
+            try {
+                // Firestore "in" query limit is 30, but for now we'll do them one by one or in batches
+                missing.forEach { uid ->
+                    val doc = db.collection("users").document(uid).get().await()
+                    val profile = doc.toObject(UserModel::class.java)
+                    if (profile != null) {
+                        _participantProfiles.value = _participantProfiles.value + (uid to profile)
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore profile fetch errors
+            }
+        }
     }
 
     // ─── Listen to messages ───────────────────────────
@@ -142,18 +164,21 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    // ─── Search user by phone ─────────────────────────
-    fun searchUserByPhone(phone: String) {
+    // ─── Search user by username ─────────────────────
+    fun searchUserByUsername(query: String) {
+        if (query.length < 3) return
         viewModelScope.launch {
             _isSearching.value = true
             _searchError.value = null
             _searchResults.value = emptyList()
             try {
-                val normalized = phone.replace(" ", "").trim()
+                val normalized = query.lowercase().trim()
                 val snapshot = db.collection("users")
-                    .whereEqualTo("phone", normalized)
+                    .whereGreaterThanOrEqualTo("username", normalized)
+                    .whereLessThanOrEqualTo("username", normalized + "\uf8ff")
                     .get()
                     .await()
+
                 _searchResults.value = snapshot.documents
                     .mapNotNull { it.toObject(UserModel::class.java) }
                     .filter { it.uid != currentUserId }

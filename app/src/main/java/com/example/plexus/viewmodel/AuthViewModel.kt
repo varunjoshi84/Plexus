@@ -3,20 +3,20 @@ package com.example.plexus.viewmodel
 import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.plexus.data.model.UserModel
 import com.google.firebase.FirebaseException
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
-import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.auth.PhoneAuthOptions
-import com.google.firebase.auth.PhoneAuthProvider
+import com.google.firebase.auth.*
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
 
 class AuthViewModel : ViewModel() {
 
     private val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
@@ -78,17 +78,96 @@ class AuthViewModel : ViewModel() {
     // ─── Sign In ──────────────────────────────────────
     private fun signInWithCredential(credential: PhoneAuthCredential) {
         viewModelScope.launch {
-            auth.signInWithCredential(credential)
-                .addOnSuccessListener {
+            try {
+                auth.signInWithCredential(credential).await()
+                checkProfileCompletion()
+            } catch (e: Exception) {
+                val message = when (e) {
+                    is FirebaseAuthInvalidCredentialsException -> "Wrong OTP. Please try again."
+                    else -> e.message ?: "Sign in failed"
+                }
+                _authState.value = AuthState.Error(message)
+            }
+        }
+    }
+
+    private fun checkProfileCompletion() {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val doc = db.collection("users").document(uid).get().await()
+                if (doc.exists() && doc.contains("username")) {
                     _authState.value = AuthState.Verified
+                } else {
+                    _authState.value = AuthState.NeedsProfile
                 }
-                .addOnFailureListener { e ->
-                    val message = when (e) {
-                        is FirebaseAuthInvalidCredentialsException -> "Wrong OTP. Please try again."
-                        else -> e.message ?: "Sign in failed"
-                    }
-                    _authState.value = AuthState.Error(message)
+            } catch (e: Exception) {
+                _authState.value = AuthState.NeedsProfile
+            }
+        }
+    }
+
+    fun saveUserProfile(username: String, displayName: String, bio: String) {
+        val uid = auth.currentUser?.uid ?: return
+        val phone = auth.currentUser?.phoneNumber ?: ""
+        
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            try {
+                // Check if username is taken
+                val existing = db.collection("users")
+                    .whereEqualTo("username", username)
+                    .get().await()
+                
+                if (!existing.isEmpty && existing.documents.any { it.id != uid }) {
+                    _authState.value = AuthState.Error("Username already taken")
+                    return@launch
                 }
+
+                val user = UserModel(
+                    uid = uid,
+                    username = username,
+                    displayName = displayName,
+                    phone = phone,
+                    bio = bio,
+                    isOnline = true
+                )
+                
+                db.collection("users").document(uid).set(user).await()
+                _authState.value = AuthState.Verified
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error(e.message ?: "Failed to save profile")
+            }
+        }
+    }
+
+    fun updateUserProfile(username: String, displayName: String) {
+        val uid = auth.currentUser?.uid ?: return
+        
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            try {
+                // Check if username is taken by someone else
+                val existing = db.collection("users")
+                    .whereEqualTo("username", username)
+                    .get().await()
+                
+                if (!existing.isEmpty && existing.documents.any { it.id != uid }) {
+                    _authState.value = AuthState.Error("Username already taken")
+                    return@launch
+                }
+
+                db.collection("users").document(uid).update(
+                    mapOf(
+                        "username" to username,
+                        "displayName" to displayName
+                    )
+                ).await()
+                
+                _authState.value = AuthState.Verified
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error(e.message ?: "Failed to update profile")
+            }
         }
     }
 

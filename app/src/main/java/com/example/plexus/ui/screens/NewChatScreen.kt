@@ -107,7 +107,7 @@ fun NewChatScreen(
                             .background(PlexusColors.CyanGreen, CircleShape)
                     )
                     Text(
-                        text = "SEARCH BY PHONE NUMBER",
+                        text = "SEARCH BY USERNAME",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 2.sp,
@@ -137,10 +137,12 @@ fun NewChatScreen(
 
                     BasicTextField(
                         value = searchText,
-                        onValueChange = { searchText = it },
+                        onValueChange = { input ->
+                            if (input.length <= 20) searchText = input.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }
+                        },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Phone
+                            keyboardType = KeyboardType.Text
                         ),
                         textStyle = TextStyle(
                             color = PlexusColors.TextWhite,
@@ -152,7 +154,7 @@ fun NewChatScreen(
                             Box {
                                 if (searchText.isEmpty()) {
                                     Text(
-                                        text = "+91 XXXXX XXXXX",
+                                        text = "enter_username",
                                         color = PlexusColors.TextMuted.copy(alpha = 0.4f),
                                         fontSize = 16.sp
                                     )
@@ -187,10 +189,10 @@ fun NewChatScreen(
                         .height(50.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(
-                            if (searchText.length >= 10) PlexusGradients.cyanButton
+                            if (searchText.length >= 3) PlexusGradients.cyanButton
                             else PlexusGradients.cyanButtonDisabled
                         )
-                        .clickable(enabled = searchText.length >= 10) {
+                        .clickable(enabled = searchText.length >= 3) {
                             onSearch(searchText.trim())
                         },
                     contentAlignment = Alignment.Center
@@ -207,7 +209,7 @@ fun NewChatScreen(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 3.sp,
-                            color = if (searchText.length >= 10) PlexusColors.BgDark
+                            color = if (searchText.length >= 3) PlexusColors.BgDark
                             else PlexusColors.TextWhite.copy(alpha = 0.3f)
                         )
                     }
@@ -294,7 +296,7 @@ fun NewChatScreen(
                             color = PlexusColors.TextWhite.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = "Search by phone number to\nstart a conversation",
+                            text = "Search by username to\nstart a conversation",
                             fontSize = 12.sp,
                             color = PlexusColors.TextMuted,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -322,7 +324,7 @@ fun NewChatScreen(
                             color = PlexusColors.TextWhite.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = "Make sure the number is registered\non Plexus with country code",
+                            text = "Make sure you have the correct username",
                             fontSize = 12.sp,
                             color = PlexusColors.TextMuted,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -367,8 +369,9 @@ private fun UserResultCard(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (user.name.isNotEmpty()) user.name.first().uppercase()
-                else user.phone.last().toString(),
+                text = if (user.displayName.isNotEmpty()) user.displayName.first().uppercase()
+                else if (user.username.isNotEmpty()) user.username.first().uppercase()
+                else "?",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = PlexusColors.TextWhite
@@ -377,13 +380,13 @@ private fun UserResultCard(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = if (user.name.isNotEmpty()) user.name else "Plexus User",
+                text = if (user.displayName.isNotEmpty()) user.displayName else user.username,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = PlexusColors.TextWhite
             )
             Text(
-                text = user.phone,
+                text = "@${user.username}",
                 fontSize = 12.sp,
                 color = PlexusColors.TextMuted
             )

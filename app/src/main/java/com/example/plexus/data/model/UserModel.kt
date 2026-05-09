@@ -2,8 +2,10 @@ package com.example.plexus.data.model
 
 data class UserModel(
     val uid: String = "",
-    val name: String = "",
+    val username: String = "",
+    val displayName: String = "",
     val phone: String = "",
-    val isOnline: Boolean = false,
-    val fcmToken: String = ""
+    val bio: String = "",
+    val profileImageUrl: String = "",
+    val isOnline: Boolean = false
 )
