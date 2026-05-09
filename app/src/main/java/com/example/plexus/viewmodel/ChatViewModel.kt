@@ -170,4 +170,16 @@ class ChatViewModel : ViewModel() {
         _searchResults.value = emptyList()
         _searchError.value = null
     }
+
+    fun saveFcmToken() {
+        com.google.firebase.messaging.FirebaseMessaging
+            .getInstance().token
+            .addOnSuccessListener { token ->
+                val uid = currentUserId
+                if (uid.isEmpty()) return@addOnSuccessListener
+                db.collection("users")
+                    .document(uid)
+                    .update("fcmToken", token)
+            }
+    }
 }

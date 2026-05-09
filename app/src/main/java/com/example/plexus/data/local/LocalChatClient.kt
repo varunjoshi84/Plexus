@@ -19,7 +19,8 @@ class LocalChatClient {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -36,9 +37,17 @@ class LocalChatClient {
         object Connected : ConnectionState()
         data class Error(val message: String) : ConnectionState()
     }
+    private var lastHost: String = ""
+    private var lastPort: Int = 0
 
     // ─── Connect to a device ──────────────────────────
+    @Volatile
+    private var isConnected = false
+
     fun connect(host: String, port: Int) {
+        lastHost = host
+        lastPort = port
+        isConnected = false
         _connectionState.value = ConnectionState.Connecting
 
         val request = Request.Builder()
@@ -48,11 +57,11 @@ class LocalChatClient {
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
                 Log.d(TAG, "Connected to $host:$port")
+                isConnected = true  // ← set flag
                 _connectionState.value = ConnectionState.Connected
             }
 
             override fun onMessage(ws: WebSocket, text: String) {
-                Log.d(TAG, "Message received: $text")
                 _receivedMessages.value = text
             }
 
@@ -62,18 +71,31 @@ class LocalChatClient {
 
             override fun onClosing(ws: WebSocket, code: Int, reason: String) {
                 ws.close(1000, null)
+                isConnected = false
                 _connectionState.value = ConnectionState.Disconnected
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "Connection failed: ${t.message}")
-                _connectionState.value = ConnectionState.Error(t.message ?: "Connection failed")
+                isConnected = false
+                _connectionState.value = ConnectionState.Error(t.message ?: "Failed")
+                if (lastHost.isNotEmpty()) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        connect(lastHost, lastPort)
+                    }, 2000)
+                }
             }
         })
     }
 
+
+
     // ─── Send a message ───────────────────────────────
     fun sendMessage(message: String): Boolean {
+        if (!isConnected) {
+            Log.e(TAG, "Not connected")
+            return false
+        }
         return webSocket?.send(message) ?: false
     }
 

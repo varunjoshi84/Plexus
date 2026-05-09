@@ -65,6 +65,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     //nanoHTTPD
     implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
+
+    implementation("com.google.firebase:firebase-messaging-ktx")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

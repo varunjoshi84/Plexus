@@ -19,6 +19,7 @@ import com.example.plexus.viewmodel.ChatViewModel
 import com.example.plexus.viewmodel.LocalChatViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.example.plexus.utils.TimeUtils
 
 object Routes {
     const val SPLASH        = "splash"
@@ -32,6 +33,8 @@ object Routes {
 
     fun otp(phoneNumber: String)                     = "otp/$phoneNumber"
     fun chat(contactId: String, contactName: String) = "chat/$contactId/$contactName"
+    const val LOCAL_CHAT = "local_chat/{deviceName}/{deviceHost}"
+    fun localChat(deviceName: String, deviceHost: String) = "local_chat/$deviceName/$deviceHost"
 }
 
 @Composable
@@ -42,6 +45,7 @@ fun PlexusNavGraph(
     val authViewModel: AuthViewModel = viewModel()
     val chatViewModel: ChatViewModel = viewModel()
     val context = LocalContext.current
+    val localViewModel: LocalChatViewModel = viewModel()
 
     NavHost(
         navController = navController,
@@ -107,6 +111,7 @@ fun PlexusNavGraph(
             LaunchedEffect(authState) {
                 if (authState is AuthState.Verified) {
                     chatViewModel.saveUser(phoneNumber)
+                    chatViewModel.saveFcmToken()
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
@@ -140,7 +145,7 @@ fun PlexusNavGraph(
                         id = chat.chatId,
                         name = chat.chatId,
                         lastMessage = chat.lastMessage,
-                        time = "",
+                        time = TimeUtils.formatChatPreviewTime(chat.lastTime),
                         isOnline = false,
                         isLocal = false
                     )
@@ -182,7 +187,7 @@ fun PlexusNavGraph(
                         id = msg.id,
                         text = msg.text,
                         isMine = msg.senderId == chatViewModel.currentUserId,
-                        time = "",
+                        time = TimeUtils.formatMessageTime(msg.timestamp),
                         status = MessageStatus.SENT
                     )
                 },
@@ -233,7 +238,12 @@ fun PlexusNavGraph(
                 connectionState = connectionState,
                 onDeviceClick = { device ->
                     localViewModel.connectToDevice(device)
-                    navController.navigate(Routes.HOME)
+                    navController.navigate(
+                        Routes.localChat(
+                            device.name.removePrefix("PlexusChat-").ifEmpty { "Device" },
+                            device.host
+                        )
+                    )
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -262,6 +272,35 @@ fun PlexusNavGraph(
                     chatViewModel.clearSearch()
                     navController.popBackStack()
                 }
+            )
+        }
+        composable(
+            route = Routes.LOCAL_CHAT,
+            arguments = listOf(
+                navArgument("deviceName") { type = NavType.StringType },
+                navArgument("deviceHost") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val deviceName = backStackEntry.arguments?.getString("deviceName") ?: "Device"
+            val messages by localViewModel.messages.collectAsState()
+
+            ChatScreen(
+                contactName = deviceName,
+                isOnline = true,
+                isLocal = true,
+                messages = messages.map { msg ->
+                    MessageUiModel(
+                        id = msg.id,
+                        text = msg.text,
+                        isMine = msg.isMine,
+                        time = TimeUtils.formatMessageTime(msg.timestamp),
+                        status = MessageStatus.SENT
+                    )
+                },
+                onSendMessage = { text ->
+                    localViewModel.sendMessage(text)
+                },
+                onBack = { navController.popBackStack() }
             )
         }
     }

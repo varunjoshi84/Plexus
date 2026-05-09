@@ -43,9 +43,9 @@ class LocalChatViewModel : ViewModel() {
         val port = getFreePort()
         Log.d("LocalChat", "Starting on port: $port")
 
-        // ✅ start NanoWSD WebSocket server
+        //  start NanoWSD WebSocket server
         chatServer = LocalChatServer(port)
-        chatServer?.start()
+        chatServer?.start(300000, false)
         Log.d("LocalChat", "WebSocket server started on port $port")
 
         nsdManager = NsdDiscoveryManager(context)
@@ -78,6 +78,10 @@ class LocalChatViewModel : ViewModel() {
         chatClient.connect(device.host, device.port)
     }
 
+    // The problem — sendMessage checks chatClient.sendMessage() return value
+// but OkHttp WebSocket.send() returns false if queue is full, not if disconnected
+
+    // In LocalChatViewModel.kt
     fun sendMessage(text: String) {
         val json = JSONObject().apply {
             put("id", UUID.randomUUID().toString())
@@ -87,21 +91,33 @@ class LocalChatViewModel : ViewModel() {
             put("timestamp", System.currentTimeMillis())
         }.toString()
 
-        val sent = chatClient.sendMessage(json)
-        if (sent) {
-            val msg = LocalMessageModel(
-                id = UUID.randomUUID().toString(),
-                text = text,
-                senderIp = myIp,
-                senderName = myName,
-                isMine = true
-            )
-            _messages.value = _messages.value + msg
-        } else {
-            Log.e("LocalChat", "Failed to send message — not connected")
+        // Add to UI immediately
+        val msg = LocalMessageModel(
+            id = UUID.randomUUID().toString(),
+            text = text,
+            senderIp = myIp,
+            senderName = myName,
+            isMine = true
+        )
+        _messages.value = _messages.value + msg
+
+        viewModelScope.launch {
+            var sent = chatClient.sendMessage(json)
+            if (!sent) {
+                // wait and retry once
+                Log.d("LocalChat", "Retrying send in 1s...")
+                kotlinx.coroutines.delay(1000)
+                sent = chatClient.sendMessage(json)
+                if (!sent) {
+                    Log.e("LocalChat", "Send failed after retry")
+                } else {
+                    Log.d("LocalChat", "Sent successfully on retry")
+                }
+            } else {
+                Log.d("LocalChat", "Message sent successfully")
+            }
         }
     }
-
     private fun parseAndAddMessage(raw: String, isMine: Boolean) {
         try {
             val json = JSONObject(raw)

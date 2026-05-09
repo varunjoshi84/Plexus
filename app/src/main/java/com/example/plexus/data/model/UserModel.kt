@@ -4,5 +4,6 @@ data class UserModel(
     val uid: String = "",
     val name: String = "",
     val phone: String = "",
-    val isOnline: Boolean = false
+    val isOnline: Boolean = false,
+    val fcmToken: String = ""
 )

@@ -26,9 +26,19 @@ class LocalChatServer(port: Int) : NanoWSD(port) {
 
         override fun onOpen() {
             Log.d(TAG, "Client connected")
-            synchronized(connectedSockets) {
-                connectedSockets.add(this)
-            }
+            synchronized(connectedSockets) { connectedSockets.add(this) }
+
+            //  send ping every 30s to keep connection alive
+            Thread {
+                try {
+                    while (isOpen) {
+                        Thread.sleep(30000)
+                        ping("ping".toByteArray())
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Ping error: ${e.message}")
+                }
+            }.start()
         }
 
         override fun onClose(
