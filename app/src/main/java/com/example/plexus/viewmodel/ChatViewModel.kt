@@ -250,8 +250,6 @@ class ChatViewModel : ViewModel() {
 
     // ─── Delete chat ──────────────────────────────────
     fun deleteChat(chatId: String) {
-        Log.d("PlexusDelete", "Starting deletion for chatId: $chatId")
-        Log.d("PlexusDelete", "Current User ID: $currentUserId")
         viewModelScope.launch {
             try {
                 // Pre-check: Fetch the chat document to see participants
@@ -295,7 +293,6 @@ class ChatViewModel : ViewModel() {
                 Log.d("PlexusDelete", "Chat document deleted successfully")
 
             } catch (e: Exception) {
-                Log.e("PlexusDelete", "Error during deletion: ${e.message}", e)
                 _error.value = "Failed to delete chat: ${e.message}"
             }
         }
