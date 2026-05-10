@@ -165,24 +165,75 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    // ─── Search user by username ─────────────────────
-    fun searchUserByUsername(query: String) {
+    // ─── Create Group Chat ────────────────────────────
+    fun createGroup(name: String, participantIds: List<String>, onCreated: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val groupId = db.collection("chats").document().id
+                val groupParticipants = (participantIds + currentUserId).distinct()
+                
+                val chat = ChatModel(
+                    chatId = groupId,
+                    participants = groupParticipants,
+                    lastMessage = "Group created",
+                    lastTime = System.currentTimeMillis(),
+                    isGroup = true,
+                    groupName = name,
+                    adminId = currentUserId
+                )
+
+                db.collection("chats")
+                    .document(groupId)
+                    .set(chat)
+                    .await()
+
+                onCreated(groupId)
+            } catch (e: Exception) {
+                _error.value = "Failed to create group: ${e.message}"
+            }
+        }
+    }
+
+    // ─── Search user by username or phone ─────────────────────
+    fun searchUsers(query: String) {
         if (query.length < 3) return
         viewModelScope.launch {
             _isSearching.value = true
             _searchError.value = null
             _searchResults.value = emptyList()
             try {
-                val normalized = query.lowercase().trim()
-                val snapshot = db.collection("users")
-                    .whereGreaterThanOrEqualTo("username", normalized)
-                    .whereLessThanOrEqualTo("username", normalized + "\uf8ff")
-                    .get()
-                    .await()
+                var normalized = query.trim()
+                val isNumeric = normalized.all { it.isDigit() || it == '+' }
+                
+                // Hardcode +91 for 10-digit Indian numbers
+                if (isNumeric && normalized.length == 10 && !normalized.startsWith("+")) {
+                    normalized = "+91$normalized"
+                }
 
-                _searchResults.value = snapshot.documents
+                Log.d("PlexusSearch", "Searching for: $normalized (isNumeric: $isNumeric)")
+
+                val snapshot = if (isNumeric) {
+                    // Search by phone number - Fix: Field name is 'phone', not 'phoneNumber'
+                    db.collection("users")
+                        .whereGreaterThanOrEqualTo("phone", normalized)
+                        .whereLessThanOrEqualTo("phone", normalized + "\uf8ff")
+                        .get()
+                        .await()
+                } else {
+                    // Search by username
+                    db.collection("users")
+                        .whereGreaterThanOrEqualTo("username", normalized)
+                        .whereLessThanOrEqualTo("username", normalized + "\uf8ff")
+                        .get()
+                        .await()
+                }
+
+                val results = snapshot.documents
                     .mapNotNull { it.toObject(UserModel::class.java) }
                     .filter { it.uid != currentUserId }
+                
+                Log.d("PlexusSearch", "Found ${results.size} users")
+                _searchResults.value = results
             } catch (e: Exception) {
                 _searchError.value = "Search failed: ${e.message}"
             } finally {
@@ -195,6 +246,59 @@ class ChatViewModel : ViewModel() {
     fun clearSearch() {
         _searchResults.value = emptyList()
         _searchError.value = null
+    }
+
+    // ─── Delete chat ──────────────────────────────────
+    fun deleteChat(chatId: String) {
+        Log.d("PlexusDelete", "Starting deletion for chatId: $chatId")
+        Log.d("PlexusDelete", "Current User ID: $currentUserId")
+        viewModelScope.launch {
+            try {
+                // Pre-check: Fetch the chat document to see participants
+                val chatDoc = db.collection("chats").document(chatId).get().await()
+                if (chatDoc.exists()) {
+                    val participants = chatDoc.get("participants") as? List<*>
+                    Log.d("PlexusDelete", "Chat participants: $participants")
+                    if (participants == null || !participants.contains(currentUserId)) {
+                        Log.w("PlexusDelete", "Warning: Current user $currentUserId not found in participants list!")
+                    }
+                } else {
+                    Log.e("PlexusDelete", "Chat document does not exist!")
+                }
+
+                // 1. Delete all messages in the subcollection
+                Log.d("PlexusDelete", "Step 1: Fetching messages for chatId: $chatId")
+                val msgsSnapshot = db.collection("messages")
+                    .document(chatId)
+                    .collection("msgs")
+                    .get()
+                    .await()
+
+                Log.d("PlexusDelete", "Found ${msgsSnapshot.size()} messages to delete")
+
+                if (!msgsSnapshot.isEmpty) {
+                    val batch = db.batch()
+                    msgsSnapshot.documents.forEach { doc ->
+                        batch.delete(doc.reference)
+                    }
+                    batch.commit().await()
+                    Log.d("PlexusDelete", "Messages batch deletion successful")
+                }
+
+                // 2. Delete the chat document itself
+                Log.d("PlexusDelete", "Step 2: Deleting chat document: $chatId")
+                db.collection("chats")
+                    .document(chatId)
+                    .delete()
+                    .await()
+                
+                Log.d("PlexusDelete", "Chat document deleted successfully")
+
+            } catch (e: Exception) {
+                Log.e("PlexusDelete", "Error during deletion: ${e.message}", e)
+                _error.value = "Failed to delete chat: ${e.message}"
+            }
+        }
     }
 
     fun saveFcmToken() {

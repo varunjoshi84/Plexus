@@ -4,5 +4,10 @@ data class ChatModel(
     val chatId: String = "",
     val participants: List<String> = emptyList(),
     val lastMessage: String = "",
-    val lastTime: Long = 0L
+    val lastTime: Long = 0L,
+    
+    // Group specific fields
+    val isGroup: Boolean = false,
+    val groupName: String = "",
+    val adminId: String = ""
 )

@@ -6,5 +6,9 @@ data class LocalMessageModel(
     val senderIp: String,
     val senderName: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val isMine: Boolean = false
+    val isMine: Boolean = false,
+    
+    // Group fields
+    val isGroup: Boolean = false,
+    val groupId: String? = null
 )

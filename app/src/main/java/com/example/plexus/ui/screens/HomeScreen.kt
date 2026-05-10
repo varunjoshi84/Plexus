@@ -40,10 +40,37 @@ fun HomeScreen(
     chats: List<ChatPreviewUiModel> = emptyList(),
     onChatClick: (String) -> Unit = {},
     onProfileClick: () -> Unit = {},
-    onNewChat: () -> Unit = {}
+    onNewChat: () -> Unit = {},
+    onNewGroup: () -> Unit = {},
+    onDeleteChat: (String) -> Unit = {}
 ) {
     val titleAlpha = remember { Animatable(0f) }
     val listAlpha = remember { Animatable(0f) }
+
+    var showDeleteDialog by remember { mutableStateOf<String?>(null) } // holds chatId
+
+    if (showDeleteDialog != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text("Delete Chat?", color = PlexusColors.TextWhite) },
+            text = { Text("This will permanently remove all messages in this conversation.", color = PlexusColors.TextMuted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteDialog?.let { onDeleteChat(it) }
+                    showDeleteDialog = null
+                }) {
+                    Text("Delete", color = Color(0xFFFF4444))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
+                    Text("Cancel", color = PlexusColors.CyanPrimary)
+                }
+            },
+            containerColor = PlexusColors.CardBg,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 
     LaunchedEffect(Unit) {
         launch { titleAlpha.animateTo(1f, tween(600)) }
@@ -178,28 +205,77 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(chats) { chat ->
-                        ChatPreviewCard(
-                            chat = chat,
-                            onClick = { onChatClick(chat.id) }
+                    items(chats, key = { it.id }) { chat ->
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = {
+                                if (it == SwipeToDismissBoxValue.EndToStart) {
+                                    showDeleteDialog = chat.id
+                                }
+                                false // Don't actually dismiss the UI yet, let the dialog handle it
+                            }
                         )
+
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            backgroundContent = {
+                                val color = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.EndToStart -> Color(0xFFFF4444).copy(alpha = 0.2f)
+                                    else -> Color.Transparent
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(color)
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                                        Text("Delete", color = Color(0xFFFF4444), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            },
+                            enableDismissFromStartToEnd = false
+                        ) {
+                            ChatPreviewCard(
+                                chat = chat,
+                                onClick = { onChatClick(chat.id) }
+                            )
+                        }
                     }
                 }
             }
         }
 
         // FAB
-        Box(
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(24.dp)
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(PlexusGradients.cyanButton)
-                .clickable { onNewChat() },
-            contentAlignment = Alignment.Center
+                .padding(24.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(text = "+", fontSize = 28.sp, color = PlexusColors.BgDark, fontWeight = FontWeight.Light)
+            // New Group Button
+            FloatingActionButton(
+                onClick = onNewGroup,
+                containerColor = PlexusColors.CardBg,
+                contentColor = PlexusColors.CyanPrimary,
+                shape = CircleShape,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Text("👥", fontSize = 20.sp)
+            }
+            
+            // New Chat Button
+            FloatingActionButton(
+                onClick = onNewChat,
+                containerColor = PlexusColors.CyanPrimary,
+                contentColor = PlexusColors.BgDark,
+                shape = CircleShape,
+                modifier = Modifier.size(56.dp)
+            ) {
+                Text("+", fontSize = 28.sp, fontWeight = FontWeight.Light)
+            }
         }
     }
 }

@@ -107,7 +107,7 @@ fun NewChatScreen(
                             .background(PlexusColors.CyanGreen, CircleShape)
                     )
                     Text(
-                        text = "SEARCH BY USERNAME",
+                        text = "SEARCH BY USERNAME OR PHONE",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 2.sp,
@@ -138,7 +138,7 @@ fun NewChatScreen(
                     BasicTextField(
                         value = searchText,
                         onValueChange = { input ->
-                            if (input.length <= 20) searchText = input.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' }
+                            if (input.length <= 20) searchText = input.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' || c == '+' }
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
@@ -154,7 +154,7 @@ fun NewChatScreen(
                             Box {
                                 if (searchText.isEmpty()) {
                                     Text(
-                                        text = "enter_username",
+                                        text = "username_or_phone",
                                         color = PlexusColors.TextMuted.copy(alpha = 0.4f),
                                         fontSize = 16.sp
                                     )

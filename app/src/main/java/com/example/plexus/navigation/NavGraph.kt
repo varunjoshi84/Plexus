@@ -44,6 +44,7 @@ object Routes {
     const val EDIT_PROFILE  = "edit_profile"
     const val LOCAL_DEVICES = "local_devices"
     const val NEW_CHAT = "new_chat"
+    const val NEW_GROUP = "new_group"
 
     fun otp(phoneNumber: String)                     = "otp/$phoneNumber"
     fun chat(contactId: String, contactName: String) = "chat/$contactId/$contactName"
@@ -60,6 +61,14 @@ fun PlexusNavGraph(
     val chatViewModel: ChatViewModel = viewModel()
     val context = LocalContext.current
     val localViewModel: LocalChatViewModel = viewModel()
+
+    val error by chatViewModel.error.collectAsState()
+
+    LaunchedEffect(error) {
+        error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -209,8 +218,11 @@ fun PlexusNavGraph(
                 },
                 onChatClick = { contactId ->
                     // Navigate with current resolved name if possible
-                    val otherUid = chats.find { it.chatId == contactId }?.participants?.firstOrNull { it != chatViewModel.currentUserId }
-                    val name = profiles[otherUid]?.displayName?.ifEmpty { profiles[otherUid]?.username } ?: "Chat"
+                    val chat = chats.find { it.chatId == contactId }
+                    val name = if (chat?.isGroup == true) chat.groupName else {
+                        val otherUid = chat?.participants?.firstOrNull { it != chatViewModel.currentUserId }
+                        profiles[otherUid]?.displayName?.ifEmpty { profiles[otherUid]?.username } ?: "Chat"
+                    }
                     navController.navigate(Routes.chat(contactId, name))
                 },
                 onProfileClick = {
@@ -218,6 +230,12 @@ fun PlexusNavGraph(
                 },
                 onNewChat = {
                     navController.navigate(Routes.NEW_CHAT)
+                },
+                onNewGroup = {
+                    navController.navigate(Routes.NEW_GROUP)
+                },
+                onDeleteChat = { chatId ->
+                    chatViewModel.deleteChat(chatId)
                 }
             )
         }
@@ -383,12 +401,34 @@ fun PlexusNavGraph(
                 isSearching = isSearching,
                 errorMessage = searchError,
                 onSearch = { query ->
-                    chatViewModel.searchUserByUsername(query)
+                    chatViewModel.searchUsers(query)
                 },
                 onUserClick = { user ->
                     chatViewModel.createChat(user.uid) { chatId ->
                         navController.navigate(Routes.chat(chatId, user.displayName.ifEmpty { user.username })) {
                             popUpTo(Routes.NEW_CHAT) { inclusive = true }
+                        }
+                    }
+                },
+                onBack = {
+                    chatViewModel.clearSearch()
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Routes.NEW_GROUP) {
+            val searchResults by chatViewModel.searchResults.collectAsState()
+            val isSearching by chatViewModel.isSearching.collectAsState()
+
+            NewGroupScreen(
+                searchResults = searchResults,
+                isSearching = isSearching,
+                onSearch = { chatViewModel.searchUsers(it) },
+                onCreateGroup = { name, ids ->
+                    chatViewModel.createGroup(name, ids) { chatId ->
+                        navController.navigate(Routes.chat(chatId, name)) {
+                            popUpTo(Routes.NEW_GROUP) { inclusive = true }
                         }
                     }
                 },
