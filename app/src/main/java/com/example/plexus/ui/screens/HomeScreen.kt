@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.sp
 import com.example.plexus.ui.theme.*
 import kotlinx.coroutines.launch
 
-// Pure UI data class — no backend
 data class ChatPreviewUiModel(
     val id: String,
     val name: String,

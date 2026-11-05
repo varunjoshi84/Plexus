@@ -9,6 +9,7 @@ import com.example.plexus.data.model.UserModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -41,6 +42,8 @@ class ChatViewModel : ViewModel() {
 
     private val _participantProfiles = MutableStateFlow<Map<String, UserModel>>(emptyMap())
     val participantProfiles: StateFlow<Map<String, UserModel>> = _participantProfiles
+
+    private var messageListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     // ─── Listen to chats ──────────────────────────────
     fun listenToChats() {
@@ -88,7 +91,10 @@ class ChatViewModel : ViewModel() {
 
     // ─── Listen to messages ───────────────────────────
     fun listenToMessages(chatId: String) {
-        db.collection("messages")
+        messageListener?.remove()
+        _messages.value = emptyList() // Clear old messages
+
+        messageListener = db.collection("messages")
             .document(chatId)
             .collection("msgs")
             .orderBy("timestamp", Query.Direction.ASCENDING)
@@ -97,9 +103,18 @@ class ChatViewModel : ViewModel() {
                     _error.value = e.message
                     return@addSnapshotListener
                 }
-                _messages.value = snapshot?.documents?.mapNotNull {
-                    it.toObject(MessageModel::class.java)
+                val msgs = snapshot?.documents?.mapNotNull {
+                    val m = it.toObject(MessageModel::class.java)
+                    Log.d("PlexusOrder", "Msg: ${m?.text} | Time: ${m?.timestamp} | ID: ${m?.id}")
+                    m
                 } ?: emptyList()
+
+                // Stable sort by date (server time)
+                // Use a very distant future for null timestamps (sending) to keep them at the bottom
+                val sorted = msgs.sortedWith(compareBy({ it.timestamp?.time ?: Long.MAX_VALUE }, { it.id }))
+
+                Log.d("PlexusOrder", "Sorted Count: ${sorted.size} | Last: ${sorted.lastOrNull()?.text}")
+                _messages.value = sorted
             }
     }
 
@@ -112,15 +127,16 @@ class ChatViewModel : ViewModel() {
                     .collection("msgs")
                     .document()
 
-                val message = MessageModel(
-                    id = msgRef.id,
-                    text = text,
-                    senderId = currentUserId,
-                    timestamp = System.currentTimeMillis(),
-                    status = "SENT"
+                // Use a Map to set server timestamp correctly
+                val messageData = mapOf(
+                    "id" to msgRef.id,
+                    "text" to text,
+                    "senderId" to currentUserId,
+                    "timestamp" to FieldValue.serverTimestamp(),
+                    "status" to "SENT"
                 )
 
-                msgRef.set(message).await()
+                msgRef.set(messageData).await()
 
                 db.collection("chats")
                     .document(chatId)
@@ -321,5 +337,10 @@ class ChatViewModel : ViewModel() {
             .addOnFailureListener {
                 Log.e("PlexusFCM", "Failed to get FCM Token", it)
             }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        messageListener?.remove()
     }
 }

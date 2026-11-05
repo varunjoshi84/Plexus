@@ -22,7 +22,6 @@ class AuthViewModel : ViewModel() {
     val authState: StateFlow<AuthState> = _authState
 
     private var verificationId: String? = null
-
     // Check if user already logged in
     val isLoggedIn: Boolean
         get() = auth.currentUser != null

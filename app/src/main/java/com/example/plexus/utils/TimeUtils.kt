@@ -5,12 +5,15 @@ import java.util.*
 
 object TimeUtils {
 
-    fun formatMessageTime(timestamp: Long): String {
-        if (timestamp == 0L) return ""
-        val date = Date(timestamp)
-        val now = Date()
+    fun formatMessageTime(date: Date?): String {
+        if (date == null) return "..."
         val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
         return sdf.format(date)
+    }
+
+    fun formatMessageTime(timestamp: Long): String {
+        if (timestamp == 0L) return ""
+        return formatMessageTime(Date(timestamp))
     }
 
     fun formatChatPreviewTime(timestamp: Long): String {

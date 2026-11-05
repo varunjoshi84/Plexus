@@ -129,7 +129,8 @@ class LocalChatViewModel : ViewModel() {
                 timestamp = json.getLong("timestamp"),
                 isMine = isMine
             )
-            _messages.value = _messages.value + msg
+            // Sort locally to ensure correct order
+            _messages.value = (_messages.value + msg).sortedBy { it.timestamp }
         } catch (e: Exception) {
             Log.e("LocalChat", "Parse error: ${e.message}")
         }

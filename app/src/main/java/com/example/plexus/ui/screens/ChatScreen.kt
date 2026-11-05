@@ -267,7 +267,6 @@ private fun MessageBubble(message: MessageUiModel) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (message.isMine) Alignment.End else Alignment.Start
     ) {
-        //Fixed: no .then() — use if/else on the whole modifier
         val bubbleModifier = if (message.isMine) {
             Modifier
                 .widthIn(max = 280.dp)

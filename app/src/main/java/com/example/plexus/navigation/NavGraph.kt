@@ -295,7 +295,7 @@ fun PlexusNavGraph(
                 phoneNumber = authViewModel.currentUser?.phoneNumber ?: "",
                 onBack = { navController.popBackStack() },
                 onLogout = {
-                    authViewModel.logout()  // ✅ now accessible
+                    authViewModel.logout()  //now accessible
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(0) { inclusive = true } // clear entire backstack
                     }

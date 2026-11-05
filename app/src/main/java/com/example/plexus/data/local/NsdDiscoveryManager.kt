@@ -98,7 +98,7 @@ class NsdDiscoveryManager(private val context: Context) {
             }
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "Service lost: ${serviceInfo.serviceName}")
-                // ✅ remove by name when lost
+                // remove by name when lost
                 _discoveredDevices.value = _discoveredDevices.value
                     .filter { it.name != serviceInfo.serviceName }
             }
@@ -111,7 +111,7 @@ class NsdDiscoveryManager(private val context: Context) {
         )
     }
 
-    // ─── Resolve IP + port of found device ────────────
+    //  IP + port of found device ────────────
     private fun resolveService(serviceInfo: NsdServiceInfo) {
         nsdManager.resolveService(
             serviceInfo,
@@ -130,8 +130,6 @@ class NsdDiscoveryManager(private val context: Context) {
 
                     val current = _discoveredDevices.value.toMutableList()
 
-                    // For emulators, multiple devices might share the same IP (10.0.2.2 or host machine IP)
-                    // but they will have different ports or names. Deduplicate by IP + Port.
                     if (current.none { it.host == device.host && it.port == device.port }) {
                         current.add(device)
                         _discoveredDevices.value = current
